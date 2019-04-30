@@ -128,7 +128,7 @@ function gradient(p0::SpikeSlabPrior, μ, σ)
     if p0.δλ > 0
         num = s * (1 + p0.λ * (s - μ^2)) / (2q * d^3) * p0.ρ;
         p0.λ += p0.δλ * num/den;
-        p0.λ = max(p0.λ, 0)
+        p0.λ = max(p0.λ, 1.0e-50)
     end
 end
 
