@@ -97,18 +97,28 @@ GaussianEP.EPOut{Float64}([0.499997, 0.499997, 3.66527e-15], [0.083325, 0.083325
 """
 function expectation_propagation(H::Vector{Term{T}}, P0::Vector{P}, F::AbstractMatrix{T} = zeros(T,0,length(P0)), d::AbstractVector{T} = zeros(T,size(F,1));
                      maxiter::Int = 2000,
+                     ∂𝐹::Union{FreeEnGrad,Nothing} = nothing,
                      callback = (x...)->nothing,
                      state::EPState{T} = EPState{T}(sum(size(F)), size(F)[2]),
                      damp::T = 0.9,
                      epsconv::T = 1e-6,
                      maxvar::T = 1e50,
                      minvar::T = 1e-50,
+                     fp::Union{IOStream,Nothing} = nothing,
+                     path_to_folder::Union{String,Nothing} = nothing,
                      inverter::Function = inv) where {T <: Real, P <: Prior}
+
+    args_grad = fieldnames(typeof(∂𝐹))
+    npriorparams = length(args_grad)
+
     @extract state A y Σ v av va a μ b s
     Ny,Nx = size(F)
     N = Nx + Ny
     @assert size(P0,1) == N
     Fp = copy(F')
+    #############
+    i_maxΔav = 0
+    ############
     for iter = 1:maxiter
         sum!(A,y,H)
         Δμ, Δs, Δav, Δva = 0.0, 0.0, 0.0, 0.0
@@ -134,28 +144,62 @@ function expectation_propagation(H::Vector{Term{T}}, P0::Vector{P}, F::AbstractM
                 Δμ = max(Δμ, update_err!(μ, i, 0))
             end
             tav, tva = moments(P0[i], μ[i], sqrt(s[i]));
+            ############################
+            #if fp != nothing
+            #    if abs(tav - av[i])>Δav
+            #        i_maxΔav = i
+            #        println(fp,"EP: iter=$iter, i_maxΔav = $i_maxΔav, Δav=$(abs(tav - av[i]))")
+            #    end
+            #end
+            ############################
             Δav = max(Δav, update_err!(av, i, tav))
             Δva = max(Δva, update_err!(va, i, tva))
             (isnan(av[i]) || isnan(va[i])) && @warn "avnew = $(av[i]) varnew = $(va[i])"
 
+            #if minvar>(1/(1/va[i] - 1/s[i]))
+            #     @info "clamping $i $(va[i]) $(s[i]) $((1/(1/va[i] - 1/s[i]))) $(μ[i]) $(sqrt(s[i]))"
+            #end
             new_b = clamp(1/(1/va[i] - 1/s[i]), minvar, maxvar)
             new_a = av[i] + new_b * (av[i] - μ[i])/s[i]
             a[i] = damp * a[i] + (1 - damp) * new_a
             b[i] = damp * b[i] + (1 - damp) * new_b
+            ####################################
+            #if fp != nothing && path_to_folder != nothing
+            #    f=open("$path_to_folder/this_simulation_variable$i.txt","a")
+                #if i>Nx # T=0 case
+            #         println(f,"$iter\t$(av[i])\t$(va[i])\t$(μ[i])\t$(s[i])\t$ss\t$vv\t$new_a\t$new_b\t$(a[i])\t$(b[i])")
+                #else
+                #     println(f,"$iter\t$(av[i])\t$(va[i])\t$(μ[i])\t$(s[i])\t$ss\t$vv\t$new_a\t$new_b\t$(a[i])\t$(b[i])\t$(P0[i].ρ)\t$(P0[i].λ)")
+                #end
+            #    close(f)
+            #end
+            ####################################
+        end
+        # Print norm of μ
+        #println("Norm of μ at iter $iter: $(norm(μ[1:Nx]))")
+
+        if ∂𝐹!=nothing
+            for l in 1:npriorparams
+                setfield!(∂𝐹,args_grad[l],0.0)
+            end
         end
 
         # learn prior's params
-        for i in randperm(N)
-            gradient(P0[i], μ[i], sqrt(s[i]));
+        #for i in randperm(N)
+        for i in 1:N
+            gradient(P0[i], μ[i], sqrt(s[i]),∂𝐹);
         end
         # learn β params
         for i in 1:length(H)
             updateβ(H[i], av[1:Nx])
         end
-        callback(av,Δav,epsconv,maxiter,H,P0)
+        callback(av,Δav,epsconv,iter,maxiter,H,P0,∂𝐹,args_grad,state)
+        #######
+        #println("i_maxΔav = $i_maxΔav")
+        #######
         if Δav < epsconv
-            return EPOut(state, :converged)
+            return EPOut(state, :converged), iter
         end
     end
-    return EPOut(state, :unconverged)
+    return EPOut(state, :unconverged), maxiter
 end
