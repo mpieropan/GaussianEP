@@ -1,4 +1,4 @@
-using FastGaussQuadrature, ForwardDiff
+using FastGaussQuadrature, ForwardDiff, SpecialFunctions
 
 Φ(x) = 0.5*(1+erf(x/sqrt(2.0)))
 ϕ(x) = exp(-x.^2/2)/sqrt(2π)
@@ -7,6 +7,11 @@ using FastGaussQuadrature, ForwardDiff
 Abstract Univariate Prior type
 """
 abstract type Prior end
+
+"""
+Abstract Free Energy gradient type
+"""
+abstract type FreeEnGrad end
 
 """
     moments(p0::T, μ, σ) where T <:Prior -> (mean, variance)
@@ -28,7 +33,7 @@ end
 
     update parameters with a single learning gradient step (learning rate is stored in p0)
 """
-function gradient(p0::T, μ, σ) where T <: Prior
+function gradient(p0::T, μ, σ, ∂𝐹::Union{FreeEnGrad,Nothing}) where T <: Prior
     #by default, do nothing
     return
 end
@@ -88,6 +93,10 @@ mutable struct SpikeSlabPrior{T<:Real} <: Prior
     δλ::T
 end
 
+mutable struct SpikeSlabFreeEnGrad{T<:Real} <: FreeEnGrad
+    ∂ρ::T
+    ∂λ::T
+end
 
 """
 ``p = \\frac1{(ℓ+1)((1/ρ-1) e^{-\\frac12 (μ/σ)^2 (2-\\frac1{1+ℓ})}\\sqrt{1+\\frac1{ℓ}}+1)}``
@@ -113,7 +122,7 @@ function moments(p0::SpikeSlabPrior,μ,σ)
 end
 
 
-function gradient(p0::SpikeSlabPrior, μ, σ)
+function gradient(p0::SpikeSlabPrior, μ, σ, ∂𝐹::Union{FreeEnGrad,Nothing})
     s = σ^2
     d = 1 + p0.λ * s;
     q = sqrt(p0.λ * s / d);
@@ -121,14 +130,23 @@ function gradient(p0::SpikeSlabPrior, μ, σ)
     den = (1 - p0.ρ) * f + q * p0.ρ;
     # update ρ
     if p0.δρ > 0
+        if ∂𝐹!=nothing
+            ∂𝐹.∂ρ += (q - f) / den
+        end
         p0.ρ += p0.δρ * (q - f) / den;
         p0.ρ = clamp(p0.ρ, 0, 1)
     end
     # update λ
     if p0.δλ > 0
         num = s * (1 + p0.λ * (s - μ^2)) / (2q * d^3) * p0.ρ;
+        if ∂𝐹!=nothing
+            ∂𝐹.∂λ += num/den
+        end
         p0.λ += p0.δλ * num/den;
-        p0.λ = max(p0.λ, 0)
+        p0.λ = max(p0.λ, 1.0e-50)
+        (p0.λ==1.0e-50 || p0.λ>1.0e20) && @warn "Lambda component of gradient is $(num/den); num=$num, den=$den; λ=$(p0.λ)"
+        #@warn "q=$q, λ=$(p0.λ), s=$s"
+        p0.λ>1.0e3 && @error "Gradient Lambda: num=$num, q=$q"
     end
 end
 
@@ -188,8 +206,7 @@ function moments(p0::PosteriorPrior, μ, σ)
     return p0.μ,p0.v
 end
 
-
-struct QuadraturePrior{T<:Real} <: Prior
+mutable struct QuadraturePrior{T<:Real} <: Prior
     f
     X::Vector{T}
     W0::Vector{T}
@@ -281,12 +298,113 @@ A θ(x) prior
 """
 struct ThetaPrior <: Prior end
 
-
 function moments(::ThetaPrior,μ,σ)
     α=μ/σ
     av=μ+pdf_cf(α)*σ
     var=σ^2*(1-α*pdf_cf(α)-pdf_cf(α)^2)
     return av,var
+end
+
+"""
+A mixture of theta priors: p_0(x)=η*Θ(x)+(1-η)*Θ(-x)
+"""
+mutable struct ThetaMixturePrior{T<:Real} <: Prior
+    η::T
+    δη::T
+end
+
+function theta_mixt_factor(x,η)
+     if abs(x)<=Inf
+         f=exp(-0.5*x^2.0)/(η*erfc(-sqrt(0.5)*x)+(1.0-η)*erfc(sqrt(0.5)*x))
+     else
+         println("In theta_mixt_factor sono *qui*!")
+         if η!=0.0
+             f=0.5*exp(-0.5*x^2.0)/η
+         else
+             f=sqrt(0.5*π)/(1.0/x-1.0/x^3.0+3.0/x^5.0)
+         end
+     end
+end
+
+##############
+mutable struct ThetaMixturePrior2{T<:Real} <: Prior
+    η::T
+    δη::T
+    thr::T
+end
+
+function theta_mixt_factor2(x,η,thr)
+     if abs(x)<=thr
+         f=exp(-0.5*x^2.0)/(η*erfc(-sqrt(0.5)*x)+(1.0-η)*erfc(sqrt(0.5)*x))
+     else
+         println("In theta_mixt_factor sono *qui*!")
+         if η!=0.0
+             f=0.5*exp(-0.5*x^2.0)/η
+         else
+             f=sqrt(0.5*π)/(1.0/x-1.0/x^3.0+3.0/x^5.0)
+         end
+     end
+end
+
+function moments(p0::ThetaMixturePrior2,μ,σ)
+    η=p0.η
+    α=μ/σ
+    f=theta_mixt_factor2(α,η,p0.thr)
+    χ=sqrt(2.0/π)*(2.0*η-1.0)*f
+    av=μ+σ*χ
+    va=σ^2.0*(1-χ^2.0)-μ*σ*χ
+    return av,va
+end
+###############
+
+function moments(p0::ThetaMixturePrior,μ,σ)
+    η=p0.η
+    α=μ/σ
+    f=theta_mixt_factor(α,η)
+    χ=sqrt(2.0/π)*(2.0*η-1.0)*f
+    av=μ+σ*χ
+    va=σ^2.0*(1-χ^2.0)-μ*σ*χ
+    return av,va
+end
+
+function gradient(p0::ThetaMixturePrior,μ,σ,∂𝐹::Union{FreeEnGrad,Nothing})
+    η=p0.η
+    x=μ/σ/sqrt(2)
+    num=2*erf(x)
+    den=η*erfc(-x)+(1-η)*erfc(x)
+    p0.η+=p0.δη*num/den
+    p0.η=clamp(p0.η,0,1)
+end
+
+###################
+"""
+A tanh prior: p_0(x)=(1+tanh(c*x))/2
+Moments are computed via gaussian quadrature.
+Usage:
+f(x)=(1+tanh(c*x))/2;
+p_0 = GaussianEP.QuadraturePrior(f,a=...,b=..., points=...);
+av,va=moments(p_0,μ,σ)
+"""
+function TanhPrior(slope::Real; a=-1.0, b=1.0, points=1000)
+    f(x) = 0.5*(1+tanh(slope*x));
+    p0 = QuadraturePrior(f,a=a,b=b,points=points);
+end
+
+"""
+Perceptron with bias: Theta prior
+"""
+mutable struct BiasedThetaPrior{T<:Real} <: Prior
+    η::T
+    δη::T
+    b::T
+end
+
+function moments(p0::BiasedThetaPrior,μ,σ)
+    α = μ/σ
+    β = (μ+p0.b)/σ
+    av = μ*(1+pdf_cf(β))
+    va =
+    return av,va
 end
 
 """
