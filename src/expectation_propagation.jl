@@ -146,7 +146,7 @@ function expectation_propagation(H::Vector{Term{T}}, P0::Vector{P}, F::AbstractM
 
         # learn prior's params
         for i in randperm(N)
-            gradient(P0[i], μ[i], s[i]));
+            gradient(P0[i], μ[i], s[i]);
         end
         # learn β params
         for i in 1:length(H)
