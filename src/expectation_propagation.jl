@@ -133,7 +133,7 @@ function expectation_propagation(H::Vector{Term{T}}, P0::Vector{P}, F::AbstractM
                 Δs = max(Δs, update_err!(s, i, maxvar))
                 Δμ = max(Δμ, update_err!(μ, i, 0))
             end
-            tav, tva = moments(P0[i], μ[i], sqrt(s[i]));
+            tav, tva = moments(P0[i], μ[i], s[i]);
             Δav = max(Δav, update_err!(av, i, tav))
             Δva = max(Δva, update_err!(va, i, tva))
             (isnan(av[i]) || isnan(va[i])) && @warn "avnew = $(av[i]) varnew = $(va[i])"
@@ -152,7 +152,7 @@ function expectation_propagation(H::Vector{Term{T}}, P0::Vector{P}, F::AbstractM
         for i in 1:length(H)
             updateβ(H[i], av[1:Nx])
         end
-        callback(av,Δav,epsconv,maxiter,H,P0)
+        callback(av,Δav,va,Δva,epsconv,maxiter,H,P0)
         if Δav < epsconv
             return EPOut(state, :converged)
         end
