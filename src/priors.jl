@@ -170,9 +170,9 @@ struct GaussianPrior{T<:Real} <: Prior
     δβ::T
 end
 
-function moments(p0::GaussianPrior, μ, σ)
-    s = 1/(1/σ^2 + p0.β)
-    return s*(μ/σ^2 + p0.μ * p0.β), s
+function moments(p0::GaussianPrior, μ, Σ)
+    s = 1/(1/Σ + p0.β)
+    return s*(μ/Σ + p0.μ * p0.β), s
 end
 
 """
