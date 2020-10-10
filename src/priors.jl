@@ -172,7 +172,7 @@ end
 
 function moments(p0::GaussianPrior, μ, Σ)
     s = 1/(1/Σ + p0.β)
-    return s*(μ/abs(Σ) + p0.μ * p0.β), s
+    return s*(μ/Σ + p0.μ * p0.β), s
 end
 
 """
