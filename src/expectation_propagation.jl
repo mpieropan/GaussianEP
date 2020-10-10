@@ -125,8 +125,8 @@ function expectation_propagation(H::Vector{Term{T}}, P0::Vector{P}, F::AbstractM
                 vv = dot(x, v) + d[i-Nx]
             end
 
-            if ss < b[i]
-                Δs = max(Δs, update_err!(s, i, clamp(1/(1/ss - 1/b[i]), minvar, maxvar)))
+            if :true #ss < b[i]
+                Δs = max(Δs, update_err!(s, i, 1/(1/ss - 1/b[i])))
                 Δμ = max(Δμ, update_err!(μ, i, s[i] * (vv/ss - a[i]/b[i])))
             else
                 ss == b[i] && @warn "infinite var, ss = $ss"
