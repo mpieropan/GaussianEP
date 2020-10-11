@@ -296,8 +296,8 @@ struct RBM_Bias_Factor{T<:Real} <: Prior
     g::T
 end
 
-function moments(p0::RBM_Bias_Factor,μ,σ)
-    arg=-p0.g+(1.0-2.0*μ)/(2.0*σ^2.0)
+function moments(p0::RBM_Bias_Factor,μ,Σ)
+    arg=-p0.g+(1.0-2.0*μ)/(2.0*Σ)
     av=1.0/(1.0+exp(arg))
     va=0.5/(1.0+cosh(arg))
     return av,va
@@ -311,11 +311,9 @@ struct RBM_Gaussian_Factor{T<:Real} <: Prior
     θ::T
 end
 
-function moments(p0::RBM_Gaussian_Factor,μ,σ)
-    av = (μ+p0.θ*σ^2.0)/(1.0+p0.γ*σ^2.0)
-    secmom = ((μ+p0.θ*σ^2.0)^2.0+σ^2.0*(1.0+p0.γ*σ^2.0))/(1+p0.γ*σ^2.0)^2.0
-    #secmom = (μ^2.0+σ^2.0+2.0*p0.θ*μ*σ^2.0+(p0.γ+p0.θ^2.0)*σ^2.0)/(1+p0.γ*σ^2.0)^2.0
-    #va = clamp(secmom-av^2.0,1e-50,1e50)
+function moments(p0::RBM_Gaussian_Factor,μ,Σ)
+    av = (μ+p0.θ*Σ)/(1.0+p0.γ*Σ)
+    secmom = ((μ+p0.θ*Σ)^2.0+Σ*(1.0+p0.γ*Σ))/(1+p0.γ*Σ)^2.0
     va=1.0/(1.0/σ^2.0+p0.γ)
     return av,va
 end
