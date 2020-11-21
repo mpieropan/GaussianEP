@@ -155,8 +155,8 @@ function expectation_propagation(H::AbstractVector{Term{T}}, P0::AbstractVector{
         end
         callback(av,Δav,va,Δva,epsconv,maxiter,H,P0)
         if Δav < epsconv #&& norm(F*av[1:Nx]+d-av[Nx+1:end]) < 1e-4
-            return EPOut(state, :converged)
+            return EPOut(state, :converged), iter
         end
     end
-    return EPOut(state, :unconverged)
+    return EPOut(state, :unconverged), lastiter
 end
