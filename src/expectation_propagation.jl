@@ -153,7 +153,7 @@ function expectation_propagation(H::AbstractVector{Term{T}}, P0::AbstractVector{
         for i in 1:length(H)
             updateβ(H[i], av[1:Nx])
         end
-        callback(av,Δav,va,Δva,epsconv,maxiter,H,P0)
+        callback(iter,av,Δav,va,Δva,epsconv,H,P0)
         if Δav < epsconv #&& norm(F*av[1:Nx]+d-av[Nx+1:end]) < 1e-4
             return EPOut(state, :converged), iter
         end
