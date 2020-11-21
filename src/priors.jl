@@ -351,7 +351,7 @@ function moments(p0::ThetaMixturePrior,μ,σ)
     return av,va
 end
 
-function gradient(p0::ThetaMixturePrior,μ,σ,∂𝐹::Union{FreeEnGrad,Nothing})
+function gradient(p0::ThetaMixturePrior,μ,σ)
     η=p0.η
     x=μ/σ/sqrt(2)
     num=2*erf(x)
