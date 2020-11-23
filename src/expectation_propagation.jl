@@ -158,5 +158,5 @@ function expectation_propagation(H::AbstractVector{Term{T}}, P0::AbstractVector{
             return EPOut(state, :converged), iter
         end
     end
-    return EPOut(state, :unconverged), lastiter
+    return EPOut(state, :unconverged), maxiter
 end
