@@ -125,6 +125,9 @@ function expectation_propagation(H::AbstractVector{Term{T}}, P0::AbstractVector{
                 ss = clamp(dot(x, Σ*x), minvar, maxvar)
                 vv = dot(x, v) + d[i-Nx]
             end
+            Δav = max(Δav, update_err!(av, i, vv))
+            Δva = max(Δva, update_err!(va, i, ss))
+            (isnan(av[i]) || isnan(va[i])) && @warn "avnew = $(av[i]) varnew = $(va[i])"
 
             if ss < b[i]
                 Δs = max(Δs, update_err!(s, i, clamp(1/(1/ss - 1/b[i]), minvar, maxvar)))
@@ -135,12 +138,13 @@ function expectation_propagation(H::AbstractVector{Term{T}}, P0::AbstractVector{
                 Δμ = max(Δμ, update_err!(μ, i, 0))
             end
             tav, tva = moments(P0[i], μ[i], sqrt(s[i]));
-            Δav = max(Δav, update_err!(av, i, tav))
-            Δva = max(Δva, update_err!(va, i, tva))
-            (isnan(av[i]) || isnan(va[i])) && @warn "avnew = $(av[i]) varnew = $(va[i])"
+            iter==1 && (Δav = max(Δav, update_err!(av, i, tav)))
+            iter==1 && (Δva = max(Δva, update_err!(va, i, tva)))
 
-            new_b = clamp(1/(1/va[i] - 1/s[i]), minvar, maxvar)
-            new_a = av[i] + new_b * (av[i] - μ[i])/s[i]
+            # moment matching
+            new_b = clamp(1/(1/tva - 1/s[i]), minvar, maxvar)
+            new_a = tav + new_b * (tav - μ[i])/s[i]
+            # update a and b
             a[i] = damp * a[i] + (1 - damp) * new_a
             b[i] = damp * b[i] + (1 - damp) * new_b
         end
