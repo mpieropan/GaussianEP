@@ -298,16 +298,8 @@ mutable struct ThetaMixturePrior{T<:Real} <: Prior
 end
 
 function theta_mixt_factor(x,η)
-     if abs(x)<=Inf
-         f=exp(-0.5*x^2.0)/(η*erfc(-sqrt(0.5)*x)+(1.0-η)*erfc(sqrt(0.5)*x))
-     else
-         println("In theta_mixt_factor sono *qui*!")
-         if η!=0.0
-             f=0.5*exp(-0.5*x^2.0)/η
-         else
-             f=sqrt(0.5*π)/(1.0/x-1.0/x^3.0+3.0/x^5.0)
-         end
-     end
+    f=exp(-0.5*x^2.0)/(η*erfc(-sqrt(0.5)*x)+(1.0-η)*erfc(sqrt(0.5)*x))
+    return f
 end
 
 ##############
@@ -328,6 +320,7 @@ function theta_mixt_factor2(x,η,thr)
              f=sqrt(0.5*π)/(1.0/x-1.0/x^3.0+3.0/x^5.0)
          end
      end
+     return f
 end
 
 function moments(p0::ThetaMixturePrior2,μ,σ)
